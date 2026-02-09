@@ -1,0 +1,66 @@
+# Core ML / GPU
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
+accelerate==0.26.1
+transformers==4.37.0
+safetensors==0.7.0
+huggingface_hub==0.36.2
+sentencepiece==0.1.99
+tokenizers==0.15.2
+tiktoken==0.12.0
+
+# Speech / Audio
+openai-whisper==20250625
+librosa==0.10.1
+soundfile==0.13.1
+audioread==3.1.0
+soxr==1.0.0
+
+# Computer Vision
+opencv-python==4.9.0.80
+pillow==10.2.0
+pydicom==2.4.4
+
+# Scientific / Data
+numpy==2.3.5
+scipy==1.17.0
+scikit-learn==1.8.0
+joblib==1.5.3
+
+# Backend / API
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+python-dotenv==1.0.1
+
+# Async / Networking
+httpx==0.26.0
+websockets==16.0
+uvloop==0.22.1
+httptools==0.7.1
+watchfiles==1.1.1
+
+# Task Queue / Workers
+celery==5.3.6
+redis==5.0.1
+
+# Database
+SQLAlchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Security / Auth
+cryptography==42.0.0
+bcrypt==5.0.0
+python-jose==3.3.0
+passlib==1.7.4
+
+# Utilities
+tqdm==4.67.3
+requests==2.31.0
+PyYAML==6.0.3
+regex==2026.1.15
+psutil==7.2.2

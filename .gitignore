@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+.env
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Model Weights
+models/weights/
+*.pth
+*.bin
+
+# DataPyTorch: 2.6.0+cu124
+CUDA available: True
+data/raw/
+data/processed
+uploads/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
