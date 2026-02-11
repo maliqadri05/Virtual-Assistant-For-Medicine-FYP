@@ -1,14 +1,19 @@
 import torch
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM
+
+import torch
+from transformers import AutoProcessor, AutoModelForCausalLM
 
 print("Loading MedGemma 4B model...")
 medgemma_model_id = "google/medgemma-4b-it"
+
 model_kwargs = dict(
     attn_implementation="eager",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,  # ← Changed from torch_dtype
     device_map="auto"
 )
-medgemma_model = AutoModel.from_pretrained(medgemma_model_id, **model_kwargs)
+
+medgemma_model = AutoModelForCausalLM.from_pretrained(medgemma_model_id, **model_kwargs)
 medgemma_processor = AutoProcessor.from_pretrained(medgemma_model_id)
 medgemma_processor.tokenizer.padding_side = "right"
 print("MedGemma loaded successfully.\n")
