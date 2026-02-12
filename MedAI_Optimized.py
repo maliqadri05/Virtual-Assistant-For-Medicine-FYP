@@ -34,8 +34,9 @@ def load_medgemma_model():
         
         model_kwargs = dict(
             attn_implementation="eager",
-            torch_dtype=torch.bfloat16,
-            device_map="auto"
+            dtype=torch.bfloat16,
+            device_map="auto",
+            trust_remote_code=True
         )
         
         model = AutoModel.from_pretrained(medgemma_model_id, **model_kwargs)

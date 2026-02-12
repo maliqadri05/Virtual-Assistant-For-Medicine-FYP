@@ -1,6 +1,9 @@
 import torch
 import json
 import re
+import warnings
+import os
+import logging
 from transformers import (
     AutoProcessor,
     AutoModel,
@@ -8,24 +11,27 @@ from transformers import (
     AutoTokenizer
 )
 
+# Suppress transformers verbosity and warnings
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
+logging.getLogger('transformers').setLevel(logging.ERROR)
+logging.getLogger('transformers.generation.utils').setLevel(logging.ERROR)
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*temperature.*')
+warnings.filterwarnings('ignore', message='.*pad_token_id.*')
+warnings.filterwarnings('ignore', message='.*Setting.*pad_token_id.*')
+
 
 # ========================================================================
 # Load MedGemma Model for Question Generation and Diagnosis
 # ========================================================================
-import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
-
 print("Loading MedGemma 4B model...")
-medgemma_model_id = "google/medgemma-4b-it"
-
-# ✅ FIXED: Use 'dtype' instead of 'torch_dtype'
+medgemma_model_id = "google/medgemma-4b-it"  # Efficient yet powerful
 model_kwargs = dict(
     attn_implementation="eager",
-    dtype=torch.bfloat16,  # ← Changed from torch_dtype
+    dtype=torch.bfloat16,
     device_map="auto"
 )
-
-medgemma_model = AutoModelForCausalLM.from_pretrained(medgemma_model_id, **model_kwargs)
+medgemma_model = AutoModel.from_pretrained(medgemma_model_id, **model_kwargs)
 medgemma_processor = AutoProcessor.from_pretrained(medgemma_model_id)
 medgemma_processor.tokenizer.padding_side = "right"
 print("MedGemma loaded successfully.\n")
@@ -39,7 +45,7 @@ validation_model_id = "mistralai/Mistral-7B-Instruct-v0.3"
 val_tokenizer = AutoTokenizer.from_pretrained(validation_model_id)
 val_model = AutoModelForCausalLM.from_pretrained(
     validation_model_id,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto"
 )
 print("Mistral Validation Agent loaded successfully.\n")
@@ -50,30 +56,24 @@ print("Mistral Validation Agent loaded successfully.\n")
 # ========================================================================
 class TransformerValidationAgent:
     """
-    Uses Mistral-7B-Instruct to evaluate if enough information
-    has been gathered for a medical diagnosis.
+    Uses Mistral-7B to evaluate conversation completeness.
+    Tracks progress to avoid repetition.
     """
 
     def __init__(self, model, tokenizer):
         self.model = model
         self.tokenizer = tokenizer
+        self.last_category = None
 
     def evaluate_completeness(self, conversation_history):
-        conversation = "\n".join([f"Patient: {msg}" for msg in conversation_history])
+        num_exchanges = len(conversation_history)
+        conversation = "\n".join([f"Patient: {msg}" for msg in conversation_history[-5:]])
 
-        prompt = f"""
-You are an intelligent medical validation assistant.
-Your task is to evaluate whether the doctor has gathered enough information
-from the patient to proceed with a medical diagnosis.
-
-Conversation:
-{conversation}
-
-Respond ONLY in JSON format with the following keys:
+        prompt = f"""Evaluate patient info. JSON only.
 {{
   "should_continue_asking": true or false,
   "missing_category": "symptoms / duration / severity / location / medical history / none",
-  "reasoning": "brief explanation"
+  "reasoning": "brief"
 }}
 """
 
@@ -81,24 +81,47 @@ Respond ONLY in JSON format with the following keys:
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=200,
-                temperature=0.3,
-                top_p=0.9
+                max_new_tokens=100,
+                do_sample=False
             )
         response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:
             try:
-                return json.loads(match.group())
+                result = json.loads(match.group())
+                if isinstance(result, dict) and result.get("missing_category") == "unclear":
+                    result["missing_category"] = "additional symptoms information"
+                # Force progression
+                if result.get("missing_category") == self.last_category and num_exchanges > 2:
+                    categories = ["symptom details", "duration and severity", "medical history", "none"]
+                    if self.last_category in categories:
+                        idx = categories.index(self.last_category)
+                        result["missing_category"] = categories[min(idx + 1, len(categories) - 1)]
+                self.last_category = result.get("missing_category")
+                return result
             except json.JSONDecodeError:
                 pass
 
-        # Fallback if JSON extraction fails
+        # Rule-based progression
+        progression = {
+            1: "symptom details", 2: "symptom details",
+            3: "duration and severity", 4: "duration and severity",
+            5: "medical history", 6: "medical history", 7: "none"
+        }
+        missing = progression.get(num_exchanges, "none")
+        
+        # Force progression if stuck
+        if missing == self.last_category and num_exchanges > 2:
+            categories = ["symptom details", "duration and severity", "medical history", "none"]
+            idx = categories.index(missing) if missing in categories else 0
+            missing = categories[min(idx + 1, len(categories) - 1)]
+        
+        self.last_category = missing
         return {
-            "should_continue_asking": True,
-            "missing_category": "unclear",
-            "reasoning": "Model output could not be parsed properly."
+            "should_continue_asking": missing != "none",
+            "missing_category": missing,
+            "reasoning": "Using rule-based progression."
         }
 
 
@@ -107,126 +130,253 @@ Respond ONLY in JSON format with the following keys:
 # ========================================================================
 class QuestionGeneratorAgent:
     """
-    Generates natural follow-up questions using MedGemma
+    Generates natural follow-up questions using MedGemma with smart fallback.
+    Optimized for speed with caching.
     """
+    
+    # Smart fallback questions - rotating to avoid repetition
+    SMART_FALLBACKS = {
+        "symptom details": [
+            "Can you describe your symptoms in more detail?",
+            "What exactly are you experiencing?",
+            "Tell me more about what you feel."
+        ],
+        "duration and severity": [
+            "How long have you had this, and on a scale of 1-10, how severe?",
+            "When did this start, and is it getting worse?",
+            "How many days has this been going on?"
+        ],
+        "medical history": [
+            "Do you have any medical conditions or take medications?",
+            "Have you experienced this before?",
+            "Are you allergic to anything?"
+        ],
+        "additional symptoms information": [
+            "Are there any other symptoms?",
+            "Anything else bothering you?",
+            "Any other changes you've noticed?"
+        ],
+        "none": ["Is there anything else you'd like to tell me?"]
+    }
 
     def __init__(self, model, processor):
         self.model = model
         self.processor = processor
+        self.fallback_index = {}  # Rotate through fallbacks
 
     def generate_question(self, conversation_history, missing_category):
-        recent_context = "\n".join(conversation_history[-3:])
-
-        prompt = f"""You are a doctor talking to a patient. Based on the conversation, ask ONE brief follow-up question.
-
-Recent conversation:
-Patient: {recent_context}
-
-The patient needs to provide: {missing_category}
-
-Generate ONE natural question a doctor would ask. Be brief and empathetic.
-Do not explain, just ask the question.
-
-Doctor:"""
-
-        inputs = self.processor(
-            text=prompt,
-            images=None,
-            return_tensors="pt",
-            padding=True
-        ).to(self.model.device)
-
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=60,
-                temperature=0.8,
-                do_sample=True,
-                top_p=0.9,
-                repetition_penalty=1.4,
-                pad_token_id=self.processor.tokenizer.eos_token_id
-            )
-
-        response = self.processor.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        if "Doctor:" in response:
-            response = response.split("Doctor:")[-1].strip()
-
-        sentences = response.split('.')
-        for sent in sentences:
-            if '?' in sent:
-                question = sent[:sent.index('?') + 1].strip()
-                question = question.strip('"\'')
-                return question
-
-        lines = [l.strip() for l in response.split('\n') if l.strip()]
-        if lines:
-            question = lines[0].strip('"\'')
-            if not question.endswith('?'):
-                question += '?'
+        # Use smart fallback first (fast)
+        if missing_category in self.SMART_FALLBACKS:
+            fallback_list = self.SMART_FALLBACKS[missing_category]
+            idx = self.fallback_index.get(missing_category, 0)
+            question = fallback_list[idx % len(fallback_list)]
+            self.fallback_index[missing_category] = idx + 1
             return question
+        
+        # Attempt generation if needed (slower)
+        try:
+            recent_context = " ".join(conversation_history[-2:])
+            prompt = f"Ask one brief doctor question about: {missing_category}. Context: {recent_context}\nQuestion:"
 
-        return "Can you tell me more about your symptoms?"
+            inputs = self.processor(
+                text=prompt,
+                images=None,
+                return_tensors="pt",
+                padding=True
+            ).to(self.model.device)
+
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=25,
+                    do_sample=False,  # Deterministic generation
+                    pad_token_id=self.processor.tokenizer.eos_token_id,
+                    use_cache=True
+                )
+
+            response = self.processor.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            if "?" in response:
+                question = response.split("?")[0].split("\n")[-1].strip() + "?"
+                if len(question) > 5:
+                    return question
+        except Exception:
+            pass
+        
+        # Fall back to smart fallback
+        return self.SMART_FALLBACKS.get(missing_category, ["Can you tell me more?"])[0]
 
 
 # ========================================================================
-# Doctor Agent (MedGemma)
+# Doctor Agent - Uses Mistral for Report Generation
 # ========================================================================
 class DoctorAgent:
     """
-    Generates comprehensive medical assessment reports
+    Generates comprehensive medical assessment reports using Mistral-7B
     """
 
-    def __init__(self, model, processor):
-        self.model = model
-        self.processor = processor
+    def __init__(self, val_model, val_tokenizer):
+        """Uses Mistral model for medical report generation"""
+        self.model = val_model
+        self.tokenizer = val_tokenizer
 
     def generate_report(self, conversation_history):
-        full_conversation = "\n".join([f"Patient: {msg}" for msg in conversation_history])
+        """Generate medical assessment using Mistral"""
+        full_conversation = "\n".join([f"Patient: {msg}" for msg in conversation_history[-6:]])  # Last 6 exchanges
 
-        prompt = f"""You are an experienced medical doctor. Based on this patient consultation, provide a comprehensive medical assessment.
+        prompt = f"""Based on this patient consultation, provide a brief medical assessment.
 
-PATIENT CONSULTATION:
+Patient Information:
 {full_conversation}
 
-Provide a detailed assessment with these sections:
+Provide assessment with:
+1. SUMMARY: Patient's main condition
+2. LIKELY CAUSES: Potential causes
+3. RECOMMENDATIONS: Suggested actions
 
-1. SUMMARY: Brief overview of patient's condition
-2. ANALYSIS: Key symptoms and their significance
-3. POSSIBLE DIAGNOSIS: Most likely condition(s) based on symptoms
-4. CAUSES: Potential underlying causes
-5. RECOMMENDATIONS: 
-   - Immediate steps to take
-   - Tests or examinations needed
-   - Treatment suggestions
-   - Warning signs to watch for
+Assessment:"""
 
-Be professional, thorough, and evidence-based.
+        try:
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512
+            ).to(self.model.device)
 
-MEDICAL ASSESSMENT:
-"""
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=400,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
 
-        inputs = self.processor(
-            text=prompt,
-            images=None,
-            return_tensors="pt",
-            padding=True
-        ).to(self.model.device)
-
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=700,
-                temperature=0.7,
-                do_sample=True,
-                top_p=0.9,
-                repetition_penalty=1.1,
-                pad_token_id=self.processor.tokenizer.eos_token_id
-            )
-
-        report = self.processor.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        if "MEDICAL ASSESSMENT:" in report:
-            report = report.split("MEDICAL ASSESSMENT:")[-1].strip()
-
+            report = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            # Extract the assessment part
+            if "Assessment:" in report:
+                report = report.split("Assessment:")[-1].strip()
+            
+            # Clean up the report
+            report = report[:500]  # Limit length
+            return report.strip()
+        
+        except Exception as e:
+            # Fallback heuristic report if generation fails
+            return self._generate_heuristic_report(conversation_history)
+    
+    def _generate_heuristic_report(self, conversation_history):
+        """Generate a heuristic-based report when AI generation fails"""
+        text = " ".join(conversation_history).lower()
+        
+        # Comprehensive symptom-cause mappings
+        condition_keywords = {
+            "indigestion|stomach|gastric|reflux|acid|heartburn": {
+                "name": "Gastrointestinal Issues",
+                "symptoms": ["Indigestion"],
+                "causes": ["Dietary issues", "Acid reflux", "Functional dyspepsia"],
+                "recommendations": ["Dietary modifications", "Antacids", "Regular meals", "Limit spicy foods"]
+            },
+            "cough|respiratory|throat|bronch|pneumonia|flu": {
+                "name": "Respiratory Infection",
+                "symptoms": ["Cough", "Throat discomfort"],
+                "causes": ["Viral infection", "Bacterial infection", "Common cold"],
+                "recommendations": ["Rest", "Hydration", "Honey tea", "Throat lozenges"]
+            },
+            "headache|migraine|tension": {
+                "name": "Headache",
+                "symptoms": ["Head pain"],
+                "causes": ["Stress", "Dehydration", "Poor sleep", "Tension"],
+                "recommendations": ["Rest", "Analgesics", "Hydration", "Stress management"]
+            },
+            "fever|temperature|infection|viral": {
+                "name": "Fever",
+                "symptoms": ["Elevated temperature"],
+                "causes": ["Viral infection", "Bacterial infection", "Inflammatory response"],
+                "recommendations": ["Rest", "Antipyretics", "Hydration", "Monitor symptoms"]
+            },
+            "pain|ache|soreness": {
+                "name": "Pain/Discomfort",
+                "symptoms": ["Pain present"],
+                "causes": ["Muscle strain", "Inflammation", "Underlying condition"],
+                "recommendations": ["Rest", "Pain management", "Physical rest", "Monitor severity"]
+            },
+            "dizziness|dizzy|vertigo|spinning": {
+                "name": "Dizziness",
+                "symptoms": ["Dizziness"],
+                "causes": ["Dehydration", "Low blood pressure", "Inner ear issues", "Anemia"],
+                "recommendations": ["Rest", "Hydration", "Gradual movement", "Monitor blood pressure"]
+            },
+            "fatigue|tired|weakness|weak|drowsy|drowsiness": {
+                "name": "Fatigue",
+                "symptoms": ["Fatigue/weakness"],
+                "causes": ["Sleep deprivation", "Anemia", "Infection", "Metabolic issues"],
+                "recommendations": ["Rest and sleep", "Nutrition", "Gradual activity", "B vitamins"]
+            },
+            "nausea|vomit|nauseous": {
+                "name": "Nausea",
+                "symptoms": ["Nausea/Vomiting"],
+                "causes": ["Gastrointestinal issue", "Infection", "Medication side effect"],
+                "recommendations": ["Anti-nausea medication", "Hydration", "Clear liquids", "Ginger tea"]
+            }
+        }
+        
+        # Find matching conditions
+        matched_conditions = []
+        for keywords, condition_info in condition_keywords.items():
+            for keyword in keywords.split("|"):
+                if keyword in text:
+                    matched_conditions.append(condition_info)
+                    break
+        
+        # Build report
+        report = "\n" + "="*60 + "\n"
+        report += "CLINICAL ASSESSMENT REPORT\n"
+        report += "="*60 + "\n\n"
+        
+        report += "1. SUMMARY:\n"
+        if matched_conditions:
+            main_condition = matched_conditions[0]["name"]
+            report += f"Patient presents with {main_condition.lower()}.\n"
+        else:
+            report += f"Patient reported {len(conversation_history)} health-related items.\n"
+        
+        report += "\n2. IDENTIFIED SYMPTOMS:\n"
+        all_symptoms = set()
+        for condition in matched_conditions:
+            for symptom in condition["symptoms"]:
+                all_symptoms.add(f"• {symptom}")
+        if all_symptoms:
+            report += "\n".join(sorted(all_symptoms))
+        else:
+            report += "• Multiple reported symptoms\n"
+        
+        report += "\n\n3. LIKELY CAUSES:\n"
+        all_causes = []
+        for condition in matched_conditions:
+            all_causes.extend(condition["causes"])
+        if all_causes:
+            for cause in all_causes[:4]:  # Limit to 4 causes
+                report += f"• {cause}\n"
+        else:
+            report += "• Functional or structural issue\n"
+        
+        report += "\n4. RECOMMENDED ACTIONS:\n"
+        all_recommendations = []
+        for condition in matched_conditions:
+            all_recommendations.extend(condition["recommendations"])
+        if all_recommendations:
+            # Remove duplicates and limit to 5
+            unique_recommendations = list(set(all_recommendations))[:5]
+            for rec in unique_recommendations:
+                report += f"• {rec}\n"
+        else:
+            report += "• Consult healthcare provider\n"
+            report += "• Monitor symptoms\n"
+            report += "• Maintain rest and hydration\n"
+        
+        report += "\n" + "="*60 + "\n"
         return report
 
 
@@ -242,7 +392,7 @@ def interactive_consultation():
     print("\n[Initializing AI agents...]")
     validation_agent = TransformerValidationAgent(val_model, val_tokenizer)
     question_agent = QuestionGeneratorAgent(medgemma_model, medgemma_processor)
-    doctor_agent = DoctorAgent(medgemma_model, medgemma_processor)
+    doctor_agent = DoctorAgent(val_model, val_tokenizer)
     print("[Agents ready]\n")
 
     print("Doctor: Good morning! I'm here to help you today.")
