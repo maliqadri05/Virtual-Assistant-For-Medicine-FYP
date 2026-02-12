@@ -1,32 +1,135 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
 venv/
 env/
-.env
-*.log
-
-# Database
-*.db
-*.sqlite3
+ENV/
+.venv
+env.bak/
+venv.bak/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.postgres
+
+# Logs
+*.log
+logs/
+*.log.*
 
 # Model Weights
-models/weights/
+models/
+weights/
 *.pth
 *.bin
+*.pt
+huggingface_hub/
+.cache/
 
-# DataPyTorch: 2.6.0+cu124
-CUDA available: True
-data/raw/
-data/processed
+# Uploaded Files
+backend/static/uploads/*
+!backend/static/uploads/.gitkeep
 uploads/
+temp/
+tmp/
 
-# Frontend
-frontend/node_modules/
-frontend/.next/
-frontend/out/
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+frontend/.env.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Testing/Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.tar.gz
+*.zip
+
+# Mac
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# PyCharm
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*~
