@@ -14,9 +14,9 @@ from functools import lru_cache
 import json
 
 try:
-    from langchain.llms import LlamaCpp
-    from langchain.prompts import PromptTemplate
-    from langchain.chains import LLMChain
+    from langchain.llms import LlamaCpp  # type: ignore
+    from langchain.prompts import PromptTemplate  # type: ignore
+    from langchain.chains import LLMChain  # type: ignore
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
