@@ -8,8 +8,10 @@ to gather missing patient information.
 from typing import Dict, List, Optional
 import logging
 import json
+import asyncio
 
 from .base_agent import BaseAgent
+from ..services.medgemma import get_medgemma_service
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,7 @@ class QuestionAgent(BaseAgent):
             model_service: MedGemma service for question generation
         """
         super().__init__("Question", model_service)
+        self.medgemma_service = get_medgemma_service()
     
     def process(self,
                conversation_history: List[str],
@@ -101,7 +104,7 @@ class QuestionAgent(BaseAgent):
                          patient_context: Optional[Dict] = None,
                          missing_category: str = None) -> str:
         """
-        Generate intelligent follow-up question.
+        Generate intelligent follow-up question using MedGemma.
         
         Args:
             conversation_history: Patient messages
@@ -111,53 +114,118 @@ class QuestionAgent(BaseAgent):
         Returns:
             Generated question string
         """
-        # Build context
-        recent_history = self._truncate_history(conversation_history, max_items=5)
-        conversation_text = "\n".join(recent_history)
-        
-        # Build patient context string
-        patient_str = ""
-        if patient_context:
-            patient_str = f"Patient Profile:\n"
-            if 'age' in patient_context:
-                patient_str += f"- Age: {patient_context['age']}\n"
-            if 'sex' in patient_context:
-                patient_str += f"- Sex: {patient_context['sex']}\n"
-            if 'weight' in patient_context:
-                patient_str += f"- Weight: {patient_context['weight']}kg\n"
-        
-        # Generate question using MedGemma
-        if self.model_service:
-            prompt = f"""You are a helpful medical assistant. Based on the patient conversation, generate ONE natural follow-up question to gather more information about their condition.
-
-{patient_str}
-
-Patient Conversation:
-{conversation_text}
-
-Guidelines:
-- Ask one clear, specific question
-- Use simple, patient-friendly language
-- Avoid medical jargon when possible
-- Don't repeat questions already asked
-- Be empathetic and supportive
-- If asking about pain, ask for a scale (1-10)
-
-Generate only the question, no explanation."""
-
+        # Try MedGemma AI first
+        if self.medgemma_service and self.medgemma_service.is_available():
             try:
-                response = self.model_service.generate(prompt, max_tokens=100)
-                # Clean response
-                question = response.strip()
-                if question.endswith('?'):
+                question = self._generate_dynamic_question(
+                    conversation_history,
+                    patient_context,
+                    missing_category
+                )
+                if question:
                     return question
-                return question + "?"
             except Exception as e:
-                logger.warning(f"MedGemma failed, using template: {str(e)}")
-                return self._get_template_question(conversation_history, missing_category)
+                logger.warning(f"MedGemma question generation failed: {e}, using template fallback")
         
-        # Fallback to template
+        # Fall back to template
         return self._get_template_question(conversation_history, missing_category)
+    
+    def _generate_dynamic_question(self,
+                                  conversation_history: List[str],
+                                  patient_context: Optional[Dict] = None,
+                                  missing_category: Optional[str] = None) -> Optional[str]:
+        """
+        Generate dynamic question using MedGemma AI.
+        
+        Args:
+            conversation_history: Patient messages
+            patient_context: Patient demographics
+            missing_category: What information is missing
+            
+        Returns:
+            AI-generated question or None if failed
+        """
+        try:
+            # Extract recent conversation context
+            recent_history = self._truncate_history(conversation_history, max_items=5)
+            
+            # Extract symptoms from conversation as list
+            symptoms = []
+            symptom_keywords = ['pain', 'ache', 'fever', 'cough', 'fatigue', 'nausea',
+                              'headache', 'dizziness', 'rash', 'itch', 'swelling']
+            conversation_text = " ".join(recent_history).lower()
+            for keyword in symptom_keywords:
+                if keyword in conversation_text:
+                    symptoms.append(keyword)
+            if not symptoms:
+                symptoms = ["general wellness inquiry"]
+            
+            # Format conversation history as list of dicts
+            formatted_history = []
+            for i, msg in enumerate(recent_history):
+                formatted_history.append({
+                    'patient': msg,
+                    'assistant': 'Assistant response' if i > 0 else ''
+                })
+            
+            # Identify what information might be missing
+            missing_info_list = self._identify_missing_info(conversation_history, patient_context)
+            missing_info_str = ", ".join(missing_info_list) if missing_info_list else "additional clinical context"
+            
+            # Run async MedGemma generation
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            question = loop.run_until_complete(
+                self.medgemma_service.generate_question(
+                    symptoms=symptoms,
+                    conversation_history=formatted_history,
+                    missing_info=missing_info_str
+                )
+            )
+            loop.close()
+            
+            logger.info("✅ Dynamic question generated using MedGemma")
+            return question
+            
+        except Exception as e:
+            logger.error(f"Dynamic question generation error: {e}")
+            return None
+    
+    def _identify_missing_info(self,
+                              conversation_history: List[str],
+                              patient_context: Optional[Dict] = None) -> List[str]:
+        """
+        Identify what information is missing from conversation.
+        
+        Args:
+            conversation_history: All patient messages
+            patient_context: Patient demographics
+            
+        Returns:
+            List of missing information categories
+        """
+        conversation_text = " ".join(conversation_history).lower()
+        missing = []
+        
+        # Check for symptom severity
+        if any(word in conversation_text for word in ['pain', 'ache', 'hurt', 'sharp']):
+            if not any(num in conversation_text for num in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
+                missing.append("severity scale")
+        
+        # Check for duration
+        if not any(word in conversation_text for word in ['day', 'week', 'month', 'year', 'hours', 'minutes']):
+            missing.append("symptom duration")
+        
+        # Check for location (if applicable to pain)
+        if 'pain' in conversation_text:
+            if not any(word in conversation_text for word in ['left', 'right', 'back', 'front', 'head', 'chest', 'leg', 'arm']):
+                missing.append("symptom location")
+        
+        # Check for medications/history
+        if patient_context is None or len(patient_context) < 3:
+            missing.append("medical history and medications")
+        
+        return missing
     
     def _get_template_question(self, 
                               conversation_history: List[str],

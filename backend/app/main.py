@@ -6,7 +6,6 @@ Initializes the FastAPI application with all routes and middleware.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.logging import LoggingMiddleware
 from fastapi.responses import JSONResponse
 import logging
 import os
@@ -38,8 +37,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.add_middleware(LoggingMiddleware)
 
 logger.info("MedAI Assistant API Server Initialized")
 logger.info(f"Allowed Origins: {allowed_origins}")

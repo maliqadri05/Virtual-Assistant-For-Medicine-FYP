@@ -58,6 +58,16 @@ httptools==0.7.1
 watchfiles==1.1.1
 
 # =========================
+# AI / LLM
+# =========================
+langchain==0.1.20
+langchain-community==0.0.32
+langchain-openai==0.1.15
+# MedGemma - Medical AI Model
+medgemma-sdk==1.0.0
+llama-cpp-python==0.2.79
+
+# =========================
 # Task Queue / Workers
 # =========================
 celery==5.6.2

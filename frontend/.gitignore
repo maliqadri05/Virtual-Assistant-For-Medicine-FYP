@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+package-lock.json
+yarn.lock
+
+# Production
+/build
+/.next/
+/out/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+.DS_Store
+
+# Testing
+/coverage
+.nyc_output
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
