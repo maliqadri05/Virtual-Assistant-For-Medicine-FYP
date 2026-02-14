@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface Settings {
   notifications: {
@@ -25,7 +26,7 @@ interface Settings {
   };
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const [settings, setSettings] = useState<Settings>({
     notifications: {
       email: true,
@@ -381,5 +382,13 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <ProtectedRoute>
+      <SettingsContent />
+    </ProtectedRoute>
   );
 }

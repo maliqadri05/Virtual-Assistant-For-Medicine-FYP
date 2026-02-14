@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { conversationAPI } from '@/services/api';
 import { LoadingSkeleton } from '@/components/Common/Loading';
 import { ErrorAlert } from '@/components/Common/Error';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface ConversationSummary {
   id: string;
@@ -18,7 +19,7 @@ interface ConversationSummary {
   tags?: string[];
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -445,5 +446,13 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

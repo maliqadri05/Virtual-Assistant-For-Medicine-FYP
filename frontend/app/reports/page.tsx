@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LoadingSkeleton } from '@/components/Common/Loading';
 import { ErrorAlert } from '@/components/Common/Error';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface ReportSummary {
   id: string;
@@ -13,7 +14,7 @@ interface ReportSummary {
   diagnosis: string;
 }
 
-export default function ReportsListPage() {
+function ReportsListContent() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,5 +141,13 @@ export default function ReportsListPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <ProtectedRoute>
+      <ReportsListContent />
+    </ProtectedRoute>
   );
 }

@@ -2,9 +2,15 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Home() {
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const { isAuthenticated, logout, isLoading } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <main className="bg-gray-50">
@@ -61,15 +67,38 @@ export default function Home() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <Link href="/dashboard" className="hidden md:block px-6 py-2.5 text-gray-700 font-medium hover:text-indigo-600 transition">
-                Sign In
-              </Link>
-              <Link
-                href="/chat/new"
-                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition"
-              >
-                Get Started
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="hidden md:block px-6 py-2.5 text-gray-700 font-medium hover:text-indigo-600 transition"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    disabled={isLoading}
+                    className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/auth/login"
+                    className="hidden md:block px-6 py-2.5 text-gray-700 font-medium hover:text-indigo-600 transition"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/register"
+                    className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg transform hover:scale-105 transition"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import '@/styles/globals.css';
+import { AuthProvider } from '@/hooks/useAuth';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -29,7 +30,9 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

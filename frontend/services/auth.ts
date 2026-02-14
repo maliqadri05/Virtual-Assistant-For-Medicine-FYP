@@ -1,15 +1,24 @@
-// Authentication utilities
-import { authAPI } from './api';
+// Authentication service with JWT token handling
 import { setStorageItem, getStorageItem, removeStorageItem } from '@/services/storage';
 
-const AUTH_TOKEN_KEY = 'auth_token';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const ACCESS_TOKEN_KEY = 'access_token';
+const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_KEY = 'user';
 
 export interface User {
   id: string;
   email: string;
-  name: string;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
   avatar?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  refresh_token?: string;
+  user: User;
 }
 
 /**
@@ -17,7 +26,7 @@ export interface User {
  */
 export function isAuthenticated(): boolean {
   if (typeof window === 'undefined') return false;
-  return !!getStorageItem(AUTH_TOKEN_KEY);
+  return !!getStorageItem(ACCESS_TOKEN_KEY);
 }
 
 /**
@@ -34,97 +43,232 @@ export function getCurrentUser(): User | null {
 }
 
 /**
- * Get auth token
+ * Get access token
  */
-export function getToken(): string | null {
-  return getStorageItem(AUTH_TOKEN_KEY);
+export function getAccessToken(): string | null {
+  return getStorageItem(ACCESS_TOKEN_KEY);
 }
 
 /**
- * Save auth token and user
+ * Get refresh token
  */
-export function setAuth(token: string, user: User): void {
-  setStorageItem(AUTH_TOKEN_KEY, token);
-  setStorageItem(USER_KEY, JSON.stringify(user));
+export function getRefreshToken(): string | null {
+  return getStorageItem(REFRESH_TOKEN_KEY);
+}
+
+/**
+ * Save auth tokens and user
+ */
+export function setAuth(data: AuthResponse): void {
+  setStorageItem(ACCESS_TOKEN_KEY, data.access_token);
+  if (data.refresh_token) {
+    setStorageItem(REFRESH_TOKEN_KEY, data.refresh_token);
+  }
+  setStorageItem(USER_KEY, JSON.stringify(data.user));
 }
 
 /**
  * Clear authentication
  */
 export function clearAuth(): void {
-  removeStorageItem(AUTH_TOKEN_KEY);
+  removeStorageItem(ACCESS_TOKEN_KEY);
+  removeStorageItem(REFRESH_TOKEN_KEY);
   removeStorageItem(USER_KEY);
 }
 
 /**
- * Login user
+ * Get authorization header
  */
-export async function login(email: string, password: string): Promise<User> {
-  try {
-    const response = await authAPI.login(email, password);
-    const user: User = {
-      id: email,
-      email,
-      name: email.split('@')[0],
-    };
-    setAuth(response.token, user);
-    return user;
-  } catch (error) {
-    clearAuth();
-    throw new Error('Login failed: Invalid credentials');
-  }
+export function getAuthHeader(): Record<string, string> {
+  const token = getAccessToken();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 /**
- * Logout user
+ * Login user with email and password
  */
-export function logout(): void {
-  clearAuth();
-  authAPI.logout();
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  try {
+    const response = await fetch(`${apiUrl}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || error.message || 'Login failed');
+    }
+
+    const data: AuthResponse = await response.json();
+    setAuth(data);
+    return data;
+  } catch (error) {
+    console.error('Login error:', error);
+    throw error;
+  }
 }
 
 /**
  * Register new user
  */
 export async function register(
+  firstName: string,
+  lastName: string,
   email: string,
-  password: string,
-  name: string
-): Promise<User> {
+  password: string
+): Promise<AuthResponse> {
   try {
-    await authAPI.register(email, password, name);
-    return await login(email, password);
-  } catch (error) {
-    throw new Error('Registration failed');
-  }
-}
+    const response = await fetch(`${apiUrl}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        password,
+      }),
+    });
 
-/**
- * Refresh authentication token
- */
-export async function refreshAuth(): Promise<string> {
-  try {
-    const response = await authAPI.refreshToken();
-    const user = getCurrentUser();
-    if (user) {
-      setAuth(response.token, user);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || error.message || 'Registration failed');
     }
-    return response.token;
+
+    const data: AuthResponse = await response.json();
+    setAuth(data);
+    return data;
   } catch (error) {
-    clearAuth();
-    throw new Error('Token refresh failed');
+    console.error('Register error:', error);
+    throw error;
   }
 }
 
 /**
- * Check token expiration
+ * Refresh access token using refresh token
+ */
+export async function refreshAccessToken(): Promise<string> {
+  try {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    const response = await fetch(`${apiUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      clearAuth();
+      throw new Error('Token refresh failed');
+    }
+
+    const data = await response.json();
+    setStorageItem(ACCESS_TOKEN_KEY, data.access_token);
+
+    return data.access_token;
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    clearAuth();
+    throw error;
+  }
+}
+
+/**
+ * Request password reset
+ */
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  try {
+    const response = await fetch(`${apiUrl}/auth/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || error.message || 'Password reset request failed');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Password reset error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Reset password with token
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string
+): Promise<{ message: string }> {
+  try {
+    const response = await fetch(`${apiUrl}/auth/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        new_password: newPassword,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || error.message || 'Password reset failed');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Reset password error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify token is still valid
+ */
+export async function verifyToken(): Promise<boolean> {
+  try {
+    const token = getAccessToken();
+    if (!token) return false;
+
+    const response = await fetch(`${apiUrl}/auth/verify`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeader(),
+      },
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if JWT token is expired
  */
 export function isTokenExpired(): boolean {
-  const token = getToken();
+  const token = getAccessToken();
   if (!token) return true;
 
   try {
-    // Decode JWT token (simple decoding without verification)
     const parts = token.split('.');
     if (parts.length !== 3) return true;
 
@@ -133,5 +277,27 @@ export function isTokenExpired(): boolean {
     return Date.now() >= expTime;
   } catch {
     return true;
+  }
+}
+
+/**
+ * Logout user
+ */
+export async function logout(): Promise<void> {
+  try {
+    const token = getAccessToken();
+    if (token) {
+      await fetch(`${apiUrl}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader(),
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+  } finally {
+    clearAuth();
   }
 }

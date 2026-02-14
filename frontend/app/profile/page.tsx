@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface UserProfile {
   firstName: string;
@@ -21,7 +22,7 @@ interface UserProfile {
   emergencyPhone: string;
 }
 
-export default function ProfilePage() {
+function ProfileContent() {
   const [profile, setProfile] = useState<UserProfile>({
     firstName: 'John',
     lastName: 'Doe',
@@ -522,3 +523,12 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+export default function ProfilePage() {
+  return (
+    <ProtectedRoute>
+      <ProfileContent />
+    </ProtectedRoute>
+  );
+}
+

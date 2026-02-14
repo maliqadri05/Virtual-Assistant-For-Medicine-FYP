@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ReportDisplay, ReportData, ReportShare } from '@/components/ReportView';
 import { Loading } from '@/components/Common/Loading';
 import { ErrorAlert } from '@/components/Common/Error';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import {
   exportReportToJSON,
   exportReportToMarkdown,
@@ -17,7 +18,7 @@ interface ReportsPageProps {
   };
 }
 
-export default function ReportPage({ params }: ReportsPageProps) {
+function ReportContent({ params }: ReportsPageProps) {
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -186,5 +187,13 @@ export default function ReportPage({ params }: ReportsPageProps) {
         🔗
       </button>
     </div>
+  );
+}
+
+export default function ReportPage(props: ReportsPageProps) {
+  return (
+    <ProtectedRoute>
+      <ReportContent {...props} />
+    </ProtectedRoute>
   );
 }
