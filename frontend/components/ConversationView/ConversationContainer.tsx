@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { MessageBubble, Message } from './MessageBubble';
 import { InputField } from './InputField';
 import { ConversationHistory, ConversationItem } from './ConversationHistory';
@@ -185,9 +186,25 @@ export function ConversationContainer({
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <div className="bg-medical-primary text-white p-4 shadow-sm">
-          <div className="max-w-6xl mx-auto">
-            <h1 className="text-2xl font-bold">Medical Consultation</h1>
-            <p className="text-sm text-blue-100">Powered by MedGemma AI</p>
+          <div className="max-w-6xl mx-auto flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold">Medical Consultation</h1>
+              <p className="text-sm text-blue-100">Powered by MedGemma AI</p>
+            </div>
+            <div className="flex gap-2 text-sm">
+              <Link
+                href="/reports"
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded transition-colors"
+              >
+                📋 Reports
+              </Link>
+              <Link
+                href="/dashboard"
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded transition-colors"
+              >
+                📊 History
+              </Link>
+            </div>
           </div>
         </div>
 

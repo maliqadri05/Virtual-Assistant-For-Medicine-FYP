@@ -44,7 +44,7 @@ export default function Home() {
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center flex-wrap">
           <Link
             href="/chat/new"
             className="btn-primary text-center px-8 py-3 text-lg font-semibold"
@@ -56,6 +56,12 @@ export default function Home() {
             className="btn-secondary text-center px-8 py-3 text-lg font-semibold"
           >
             View History
+          </Link>
+          <Link
+            href="/reports"
+            className="bg-slate-400 hover:bg-slate-500 text-white text-center px-8 py-3 text-lg font-semibold rounded transition-colors"
+          >
+            My Reports
           </Link>
         </div>
 
