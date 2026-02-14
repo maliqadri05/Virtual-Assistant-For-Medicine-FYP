@@ -1,6 +1,6 @@
 // Authentication utilities
 import { authAPI } from './api';
-import { setStorageItem, getStorageItem, removeStorageItem } from './storage';
+import { setStorageItem, getStorageItem, removeStorageItem } from '@/services/storage';
 
 const AUTH_TOKEN_KEY = 'auth_token';
 const USER_KEY = 'user';
