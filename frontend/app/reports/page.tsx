@@ -56,7 +56,7 @@ function ReportsListContent() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-medical-primary text-white">
+      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary text-white">
         <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <div>
@@ -65,7 +65,7 @@ function ReportsListContent() {
             </div>
             <Link
               href="/chat/new"
-              className="bg-white text-medical-primary hover:bg-blue-50 font-bold py-2 px-6 rounded-lg transition-colors"
+              className="bg-white text-brand-primary hover:bg-indigo-50 font-bold py-2 px-6 rounded-lg transition-colors shadow-md"
             >
               + New Consultation
             </Link>
@@ -96,7 +96,7 @@ function ReportsListContent() {
             </p>
             <Link
               href="/chat/new"
-              className="inline-block mt-6 bg-medical-primary text-white font-medium py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-block mt-6 bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-medium py-2 px-6 rounded-lg hover:shadow-lg transition-all transform hover:scale-105"
             >
               Start Consultation
             </Link>
@@ -109,7 +109,7 @@ function ReportsListContent() {
               <Link
                 key={report.id}
                 href={`/reports/${report.id}`}
-                className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border border-slate-100 hover:border-medical-primary cursor-pointer"
+                className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all p-6 border border-slate-100 hover:border-brand-primary hover:scale-105 cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -128,7 +128,7 @@ function ReportsListContent() {
                 </p>
 
                 <div className="flex gap-2">
-                  <button className="flex-1 bg-medical-primary hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                  <button className="flex-1 bg-gradient-to-r from-brand-primary to-brand-secondary hover:shadow-md text-white px-4 py-2 rounded font-medium transition-all">
                     View Report
                   </button>
                   <button className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-900 px-4 py-2 rounded font-medium transition-colors">

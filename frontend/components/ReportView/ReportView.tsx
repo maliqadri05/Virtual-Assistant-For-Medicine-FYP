@@ -88,7 +88,7 @@ export function ReportView({ report, onExport, onClose }: ReportViewProps) {
       <div className="flex gap-3 mt-8 pt-6 border-t border-slate-200">
         <button
           onClick={() => onExport?.('pdf')}
-          className="flex-1 bg-medical-primary hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+          className="flex-1 bg-gradient-to-r from-brand-primary to-brand-secondary hover:shadow-lg text-white font-medium py-2 px-4 rounded-lg transition-all"
         >
           📥 Download PDF
         </button>

@@ -6,6 +6,7 @@ import { MessageBubble, Message } from './MessageBubble';
 import { InputField } from './InputField';
 import { ConversationHistory, ConversationItem } from './ConversationHistory';
 import { conversationAPI } from '@/services/api';
+import { websocketService } from '@/services/websocket';
 
 interface ConversationContainerProps {
   initialConversationId?: string;
@@ -23,7 +24,9 @@ export function ConversationContainer({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Scroll to bottom on new messages
   const scrollToBottom = () => {
@@ -87,6 +90,84 @@ export function ConversationContainer({
     loadConversation();
   }, [currentConversationId]);
 
+  // Setup WebSocket connection for real-time messages
+  useEffect(() => {
+    if (!currentConversationId) {
+      // Disconnect if no conversation is selected
+      if (wsUnsubscribeRef.current) {
+        wsUnsubscribeRef.current();
+        wsUnsubscribeRef.current = null;
+      }
+      websocketService.disconnect();
+      setWsConnected(false);
+      return;
+    }
+
+    const setupWebSocket = async () => {
+      try {
+        // Try to connect to WebSocket
+        await websocketService.connect();
+        setWsConnected(true);
+        
+        // Subscribe to message events for this conversation
+        const unsubscribe = websocketService.on(`conversation:${currentConversationId}:message`, (data: any) => {
+          // Handle incoming real-time message
+          const realTimeMessage: Message = {
+            id: data.id || 'msg-' + Date.now(),
+            role: data.role || 'assistant',
+            content: data.content || '',
+            timestamp: new Date(data.timestamp || Date.now()),
+          };
+          
+          // Replace loading message or append new message
+          setMessages((prev) => {
+            const updatedMessages = [...prev];
+            const loadingIndex = updatedMessages.findIndex((msg) => msg.id === 'loading');
+            
+            if (loadingIndex >= 0) {
+              // Replace loading message
+              updatedMessages[loadingIndex] = realTimeMessage;
+            } else {
+              // Append new message
+              updatedMessages.push(realTimeMessage);
+            }
+            
+            return updatedMessages;
+          });
+        });
+
+        wsUnsubscribeRef.current = unsubscribe;
+      } catch (err) {
+        // WebSocket connection failed, fall back to HTTP polling
+        console.warn('WebSocket connection failed, using HTTP polling:', err);
+        setWsConnected(false);
+      }
+    };
+
+    setupWebSocket();
+
+    // Cleanup on unmount or conversation change
+    return () => {
+      if (wsUnsubscribeRef.current) {
+        wsUnsubscribeRef.current();
+        wsUnsubscribeRef.current = null;
+      }
+    };
+  }, [currentConversationId]);
+
+  // Cleanup WebSocket on component unmount
+  useEffect(() => {
+    return () => {
+      // Disconnect WebSocket when component unmounts
+      if (wsUnsubscribeRef.current) {
+        wsUnsubscribeRef.current();
+        wsUnsubscribeRef.current = null;
+      }
+      websocketService.disconnect();
+      setWsConnected(false);
+    };
+  }, []);
+
   // Handle send message
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
@@ -123,22 +204,28 @@ export function ConversationContainer({
         setCurrentConversationId(convId);
       }
 
+      // Send message via HTTP (with WebSocket fallback)
       const response: any = await conversationAPI.addMessage(convId || '', content);
 
-      // Replace loading message with actual response
-      setMessages((prev) => {
-        const updatedMessages = [...prev];
-        const lastIdx = updatedMessages.length - 1;
-        if (lastIdx >= 0 && updatedMessages[lastIdx].id === 'loading') {
-          updatedMessages[lastIdx] = {
-            id: response?.id || 'msg-' + Date.now(),
-            role: 'assistant',
-            content: response?.content || 'No response',
-            timestamp: new Date(response?.timestamp || Date.now()),
-          };
-        }
-        return updatedMessages;
-      });
+      // If WebSocket is connected, the message will come through WebSocket
+      // Otherwise, use the HTTP response
+      if (!wsConnected) {
+        // Replace loading message with actual response (HTTP mode)
+        setMessages((prev) => {
+          const updatedMessages = [...prev];
+          const lastIdx = updatedMessages.length - 1;
+          if (lastIdx >= 0 && updatedMessages[lastIdx].id === 'loading') {
+            updatedMessages[lastIdx] = {
+              id: response?.id || 'msg-' + Date.now(),
+              role: 'assistant',
+              content: response?.content || 'No response',
+              timestamp: new Date(response?.timestamp || Date.now()),
+            };
+          }
+          return updatedMessages;
+        });
+      }
+      // If WebSocket is connected, loading message will be replaced by WebSocket message handler
     } catch (err) {
       setError('Failed to send message. Please try again.');
       console.error('Failed to send message:', err);
@@ -185,25 +272,33 @@ export function ConversationContainer({
       {/* Main conversation area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="bg-medical-primary text-white p-4 shadow-sm">
+        <div className="bg-gradient-to-r from-brand-primary to-brand-secondary text-white p-4 shadow-md">
           <div className="max-w-6xl mx-auto flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold">Medical Consultation</h1>
               <p className="text-sm text-blue-100">Powered by MedGemma AI</p>
             </div>
-            <div className="flex gap-2 text-sm">
-              <Link
-                href="/reports"
-                className="bg-white bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded transition-colors"
-              >
-                📋 Reports
-              </Link>
-              <Link
-                href="/dashboard"
-                className="bg-white bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded transition-colors"
-              >
-                📊 History
-              </Link>
+            <div className="flex gap-4 items-center">
+              {/* WebSocket Connection Status */}
+              <div className="flex items-center gap-2 text-xs bg-white bg-opacity-20 px-3 py-1 rounded">
+                <span className={`inline-block w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-gray-400'}`}></span>
+                <span>{wsConnected ? 'Real-time' : 'HTTP Mode'}</span>
+              </div>
+              
+              <div className="flex gap-2 text-sm">
+                <Link
+                  href="/reports"
+                  className="bg-white bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded transition-colors"
+                >
+                  📋 Reports
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="bg-white bg-opacity-20 hover:bg-opacity-30 px-3 py-1 rounded transition-colors"
+                >
+                  📊 History
+                </Link>
+              </div>
             </div>
           </div>
         </div>

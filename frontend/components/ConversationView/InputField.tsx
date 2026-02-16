@@ -54,17 +54,17 @@ export function InputField({
         placeholder={placeholder}
         disabled={disabled}
         rows={1}
-        className={`flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-medical-primary resize-none transition-colors ${
+        className={`flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary resize-none transition-colors ${
           disabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white'
         }`}
       />
       <button
         type="submit"
         disabled={disabled || !input.trim()}
-        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+        className={`px-4 py-2 rounded-lg font-medium transition-all ${
           disabled || !input.trim()
             ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-            : 'bg-medical-primary text-white hover:bg-blue-700 active:bg-blue-800'
+            : 'bg-gradient-to-r from-brand-primary to-brand-secondary text-white hover:shadow-md active:scale-95'
         }`}
         title={disabled ? 'Loading...' : input.trim() ? 'Send message (Enter)' : 'Type a message first'}
       >

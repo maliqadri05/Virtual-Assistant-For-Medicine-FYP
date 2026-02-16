@@ -30,7 +30,7 @@ export function ConversationHistory({
       <div className="p-4 border-b border-slate-300">
         <Link
           href="/chat/new"
-          className="w-full bg-medical-primary text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors text-center block font-medium"
+          className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary text-white py-2 px-4 rounded-lg hover:shadow-md transition-all text-center block font-medium"
         >
           + New Chat
         </Link>
@@ -50,7 +50,7 @@ export function ConversationHistory({
                 key={conv.id}
                 className={`p-3 rounded-lg cursor-pointer transition-colors group ${
                   currentId === conv.id
-                    ? 'bg-medical-primary text-white'
+                    ? 'bg-gradient-to-r from-brand-primary to-brand-secondary text-white shadow-md'
                     : 'bg-white hover:bg-slate-200 text-slate-900'
                 }`}
                 onClick={() => onSelect?.(conv.id)}

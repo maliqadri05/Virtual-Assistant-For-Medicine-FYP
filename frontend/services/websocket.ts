@@ -285,7 +285,8 @@ class WebSocketService {
 
 // Create singleton instance
 const wsService = new WebSocketService();
+const websocketService = wsService; // Named export for convenience
 
 export default wsService;
-export { WebSocketService };
+export { WebSocketService, websocketService };
 export type { WebSocketConfig };

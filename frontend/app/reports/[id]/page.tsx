@@ -111,7 +111,7 @@ function ReportContent({ params }: ReportsPageProps) {
           />
           <Link
             href="/dashboard"
-            className="inline-block mt-6 bg-medical-primary text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+            className="inline-block mt-6 bg-gradient-to-r from-brand-primary to-brand-secondary text-white px-4 py-2 rounded hover:shadow-lg transition-all"
           >
             ← Back to Dashboard
           </Link>
@@ -154,7 +154,7 @@ function ReportContent({ params }: ReportsPageProps) {
             <div className="flex gap-3">
               <button
                 onClick={() => handleExport(exportFormat)}
-                className="flex-1 bg-medical-primary hover:bg-blue-700 text-white py-2 rounded font-medium transition-colors"
+                className="flex-1 bg-gradient-to-r from-brand-primary to-brand-secondary hover:shadow-lg text-white py-2 rounded font-medium transition-all"
               >
                 Export
               </button>
@@ -181,7 +181,7 @@ function ReportContent({ params }: ReportsPageProps) {
       {/* Floating Action Button for Share */}
       <button
         onClick={() => setShowShare(true)}
-        className="fixed bottom-8 right-8 bg-medical-primary hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all print:hidden"
+        className="fixed bottom-8 right-8 bg-gradient-to-r from-brand-primary to-brand-secondary hover:shadow-xl text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110 print:hidden"
         title="Share report"
       >
         🔗

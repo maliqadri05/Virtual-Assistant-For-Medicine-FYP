@@ -118,7 +118,7 @@ ${report.disclaimer}
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="bg-medical-primary text-white p-6 print:bg-slate-900">
+      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary text-white p-6 print:bg-slate-900">
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold mb-2">{report.title}</h1>
@@ -183,7 +183,7 @@ ${report.disclaimer}
         <div className="bg-slate-50 border-t border-slate-200 p-6 flex gap-3 flex-wrap print:hidden">
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 bg-medical-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            className="flex items-center gap-2 bg-gradient-to-r from-brand-primary to-brand-secondary hover:shadow-lg text-white px-4 py-2 rounded-lg font-medium transition-all"
             title="Print report (Ctrl+P)"
           >
             🖨️ Print

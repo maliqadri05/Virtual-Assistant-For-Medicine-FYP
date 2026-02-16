@@ -26,8 +26,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={`max-w-xs lg:max-w-md xl:max-w-lg px-4 py-2 rounded-lg ${
           isUser
-            ? 'bg-medical-primary text-white rounded-br-none'
-            : 'bg-slate-200 text-slate-900 rounded-bl-none'
+            ? 'bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-br-none shadow-md'
+            : 'bg-slate-100 text-slate-900 rounded-bl-none'
         }`}
       >
         <div className="break-words">
