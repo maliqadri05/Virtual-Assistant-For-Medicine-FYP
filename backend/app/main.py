@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 import logging
 import os
 from pathlib import Path
+from app.core.database import init_db
 
 # Configure logging
 logging.basicConfig(
@@ -72,12 +73,39 @@ try:
 except Exception as e:
     logger.error(f"Failed to load conversations router: {str(e)}")
 
+try:
+    from app.api.endpoints import auth
+    app.include_router(auth.router, prefix="/api", tags=["auth"])
+    logger.info("✓ Auth router loaded")
+except Exception as e:
+    logger.error(f"Failed to load auth router: {str(e)}")
+
+try:
+    from app.api.endpoints import patient
+    app.include_router(patient.router, prefix="/api", tags=["patient"])
+    logger.info("✓ Patient router loaded")
+except Exception as e:
+    logger.error(f"Failed to load patient router: {str(e)}")
+
+try:
+    from app.api.endpoints import profile
+    app.include_router(profile.router, prefix="/api", tags=["patient-profile"])
+    logger.info("✓ Patient Profile router loaded")
+except Exception as e:
+    logger.error(f"Failed to load patient profile router: {str(e)}")
+
+try:
+    from app.api.endpoints import history
+    app.include_router(history.router, prefix="/api", tags=["history"])
+    logger.info("✓ Conversation History router loaded")
+except Exception as e:
+    logger.error(f"Failed to load conversation history router: {str(e)}")
+
 # Future routers will be added here
-# - app.api.endpoints.auth
-# - app.api.endpoints.patients
 # - app.api.endpoints.studies
 # - app.api.endpoints.images
 # - app.api.endpoints.reports
+# - app.api.endpoints.notifications
 
 
 # ==================== ERROR HANDLERS ====================
@@ -101,6 +129,13 @@ async def general_exception_handler(request, exc):
 async def startup_event():
     """Run on application startup"""
     logger.info("Starting up MedAI Assistant...")
+    
+    # Initialize database
+    try:
+        init_db()
+        logger.info("✓ Database initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {str(e)}")
     
     # Create necessary directories
     upload_dir = Path("static/uploads")

@@ -50,7 +50,7 @@ class ConversationCreateRequest(BaseModel):
 
 class ConversationCreateResponse(BaseModel):
     """Response when creating conversation"""
-    conversation_id: str
+    id: str
     created_at: datetime
     initial_message: Message
     patient_context: Optional[PatientContext] = None
@@ -149,7 +149,7 @@ async def create_conversation(
         logger.info(f"Created conversation: {conversation_id}")
         
         return ConversationCreateResponse(
-            conversation_id=conversation_id,
+            id=conversation_id,
             created_at=now,
             initial_message=initial_message,
             patient_context=request.patient_context
@@ -161,7 +161,7 @@ async def create_conversation(
 
 
 @router.post(
-    "/{conversation_id}/message",
+    "/{conversation_id}/messages",
     response_model=MessageResponse,
     summary="Send message in conversation"
 )
@@ -402,3 +402,269 @@ async def generate_report(
     except Exception as e:
         logger.error(f"Error generating report: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate report")
+
+
+@router.get(
+    "/",
+    response_model=List[Dict[str, Any]],
+    summary="List all conversations"
+)
+async def list_conversations(
+    current_user: dict = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 50
+) -> List[Dict[str, Any]]:
+    """
+    List all conversations for authenticated user.
+    
+    Query Parameters:
+    - skip: Number of conversations to skip (pagination)
+    - limit: Maximum conversations to return
+    
+    Returns:
+    - List of conversation summaries
+    """
+    try:
+        user_id = current_user.get("user_id")
+        user_conversations = [
+            {
+                "id": conv_id,
+                "title": f"Consultation {conv_id[:8]}",
+                "messageCount": len(conv_data.get("messages", [])),
+                "createdAt": conv_data.get("created_at"),
+                "updatedAt": conv_data.get("updated_at"),
+                "status": "completed" if len(conv_data.get("messages", [])) > 4 else "in-progress",
+                "lastMessage": conv_data.get("messages", [])[-1].get("content", "No messages") if conv_data.get("messages") else "No messages",
+                "timestamp": conv_data.get("updated_at")
+            }
+            for conv_id, conv_data in conversations_db.items()
+            if conv_data.get("user_id") == user_id
+        ]
+        
+        # Sort by updated_at descending
+        user_conversations.sort(key=lambda x: x["updatedAt"] or datetime.utcnow(), reverse=True)
+        
+        # Apply pagination
+        return user_conversations[skip : skip + limit]
+    
+    except Exception as e:
+        logger.error(f"Error listing conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list conversations")
+
+
+@router.delete(
+    "/{conversation_id}",
+    summary="Delete conversation"
+)
+async def delete_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, str]:
+    """
+    Delete a conversation permanently.
+    
+    Returns:
+    - Confirmation of deletion
+    """
+    try:
+        if conversation_id not in conversations_db:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        conv_data = conversations_db[conversation_id]
+        
+        # Verify user owns conversation
+        if conv_data["user_id"] != current_user.get("user_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        del conversations_db[conversation_id]
+        
+        logger.info(f"Deleted conversation: {conversation_id}")
+        
+        return {"status": "deleted", "conversation_id": conversation_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete conversation")
+
+
+@router.get(
+    "/{conversation_id}/report",
+    response_model=Dict[str, Any],
+    summary="Get conversation report"
+)
+async def get_report(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Get the generated report for a conversation.
+    
+    Returns:
+    - Generated medical report with all sections
+    """
+    try:
+        if conversation_id not in conversations_db:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        conv_data = conversations_db[conversation_id]
+        
+        # Verify user owns conversation
+        if conv_data["user_id"] != current_user.get("user_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Generate report
+        history = [msg["content"] for msg in conv_data["messages"] if msg["role"] == "user"]
+        agent_manager = conv_data["agent_manager"]
+        patient_context = conv_data["patient_context"].dict() if conv_data["patient_context"] else None
+        
+        report = agent_manager.force_report_generation(history, patient_context)
+        
+        return {
+            "conversation_id": conversation_id,
+            "report": report,
+            "generated_at": datetime.utcnow(),
+            "message_count": len(conv_data["messages"])
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting report: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get report")
+
+
+@router.post(
+    "/{conversation_id}/share",
+    summary="Share conversation"
+)
+async def share_conversation(
+    conversation_id: str,
+    request: Dict[str, str],
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, str]:
+    """
+    Share a conversation with another user via email.
+    
+    Request body:
+    - email: Email address to share with
+    
+    Returns:
+    - Confirmation of sharing
+    """
+    try:
+        if conversation_id not in conversations_db:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        conv_data = conversations_db[conversation_id]
+        
+        # Verify user owns conversation
+        if conv_data["user_id"] != current_user.get("user_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        email = request.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        logger.info(f"Conversation {conversation_id} shared with {email}")
+        
+        return {
+            "status": "shared",
+            "conversation_id": conversation_id,
+            "shared_with": email
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sharing conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to share conversation")
+
+
+@router.get(
+    "/search",
+    response_model=List[Dict[str, Any]],
+    summary="Search conversations"
+)
+async def search_conversations(
+    current_user: dict = Depends(get_current_user),
+    q: str = ""
+) -> List[Dict[str, Any]]:
+    """
+    Search conversations by keyword.
+    
+    Query Parameters:
+    - q: Search query
+    
+    Returns:
+    - List of matching conversations
+    """
+    try:
+        user_id = current_user.get("user_id")
+        query_lower = q.lower()
+        
+        results = [
+            {
+                "id": conv_id,
+                "title": f"Consultation {conv_id[:8]}",
+                "messageCount": len(conv_data.get("messages", [])),
+                "createdAt": conv_data.get("created_at"),
+                "updatedAt": conv_data.get("updated_at"),
+            }
+            for conv_id, conv_data in conversations_db.items()
+            if conv_data.get("user_id") == user_id
+            and (query_lower in conv_id.lower() or 
+                 any(query_lower in msg.get("content", "").lower() 
+                     for msg in conv_data.get("messages", [])))
+        ]
+        
+        return results
+    
+    except Exception as e:
+        logger.error(f"Error searching conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to search conversations")
+
+
+@router.get(
+    "/stats",
+    response_model=Dict[str, Any],
+    summary="Get conversation statistics"
+)
+async def get_stats(
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Get statistics for all user conversations.
+    
+    Returns:
+    - Total conversations
+    - Total messages
+    - Average messages per conversation
+    - Completed vs in-progress counts
+    """
+    try:
+        user_id = current_user.get("user_id")
+        user_conversations = {
+            conv_id: conv_data
+            for conv_id, conv_data in conversations_db.items()
+            if conv_data.get("user_id") == user_id
+        }
+        
+        total_conversations = len(user_conversations)
+        total_messages = sum(len(conv.get("messages", [])) for conv in user_conversations.values())
+        completed = sum(1 for conv in user_conversations.values() 
+                       if len(conv.get("messages", [])) > 4)
+        in_progress = total_conversations - completed
+        
+        return {
+            "total_conversations": total_conversations,
+            "total_messages": total_messages,
+            "average_messages_per_conversation": total_messages / max(total_conversations, 1),
+            "completed": completed,
+            "in_progress": in_progress
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get statistics")
